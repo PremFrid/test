@@ -15,6 +15,10 @@ void setup() {
   }
 
 void camera(){
+  if (theSD.exists("rsize.pgm")) {
+    theSD.remove("rsize.pgm");
+    Serial.println("removed rsize.pgm"); 
+  }
   Serial.println("take picture"); 
   CamImage img = theCamera.takePicture(); 
   if (!img.isAvailable()) { 
