@@ -1,0 +1,135 @@
+#include <Camera.h> 
+#include <SDHCI.h> 
+#include <NetPBM.h>
+#include <DNNRT.h>
+
+SDClass theSD; 
+DNNRT dnnrt;
+
+void setup() { 
+  Serial.begin(115200); 
+  Serial2.begin(115200); 
+  theSD.begin(); 
+  theCamera.begin(); 
+  theCamera.setStillPictureImageFormat( 320, 240,CAM_IMAGE_PIX_FMT_YUV422 ); 
+  }
+
+void camera(){
+  Serial.println("take picture"); 
+  CamImage img = theCamera.takePicture(); 
+  if (!img.isAvailable()) { 
+    Serial.println("take picture failed"); 
+    return;
+  }
+ 
+  CamImage small; 
+  CamErr err = img.clipAndResizeImageByHW( small, 96, 56, 223, 183, 64, 64); 
+  
+  if (err) { 
+    Serial.println("ERROR: " + String(err)); 
+    return; 
+  } 
+    
+  if (!small.isAvailable()) { 
+    Serial.println("clipAndResize failed"); 
+    return; 
+  } 
+    
+  File myFile = theSD.open("rsize.pgm",FILE_WRITE); 
+  myFile.println("P5");
+  myFile.println("64 64"); 
+  myFile.println("255"); 
+  uint16_t* buf = (uint16_t*)small.getImgBuff(); 
+  
+  for (int i = 0; i < 64; ++i) { 
+    for (int j = 0; j < 64; ++j) { 
+      uint8_t val = (uint8_t)((*buf & 0xff00) >> 8); 
+      Serial.print(String(val) + String(" ")); 
+      // for debug 
+      myFile.write(val); 
+      ++buf; 
+    }
+    Serial.println(); 
+  }
+  myFile.close(); 
+}
+
+void nnb(){
+  File nnbfile = theSD.open("iine_300.nnb");
+  if (!nnbfile) {
+    Serial.print("nnb not found");
+    return;
+  }
+  int ret = dnnrt.begin(nnbfile);
+  if (ret < 0) {
+    Serial.print("Runtime initialization failure. ");
+    if (ret == -16) {
+      Serial.println("Please update bootloader!");
+    } else {
+      Serial.println(ret);
+    }
+    return;
+  }
+
+  // Image size for this network model is 28 x 28.
+
+  File pgmfile("resize.pgm");
+  NetPBM pgm(pgmfile);
+
+  unsigned short width, height;
+  pgm.size(&width, &height);
+
+  DNNVariable input(width * height);
+  float *buff = input.data();
+  int i = 0;
+  
+  /*
+   * Normalize pixel data into between 0.0 and 1.0.
+   * PGM file is gray scale pixel map, so divide by 255.
+   * This normalization depends on the network model.
+   */
+
+  for (int x = 0; x < height; x++) {
+    for (int y = 0; y < width; y++) {
+      buff[i] = float(pgm.getpixel(x, y)) / 255.0;
+      i++;
+    }
+  }
+
+  dnnrt.inputVariable(input, 0);
+  dnnrt.forward();
+  DNNVariable output = dnnrt.outputVariable(0);
+
+  /*
+   * Get index for maximum value.
+   * In this example network model, this index represents a number,
+   * so you can determine recognized number from this index.
+   */
+
+  for (int x = 0; x < 10; x++) {
+    Serial.print("value of ");
+    Serial.print(x);
+    Serial.print(" = ");
+    Serial.print(output[x]);
+    Serial.println();
+  }
+  int index = output.maxIndex();
+  Serial.print("Image is ");
+  Serial.print(index);
+  Serial.println();
+
+  dnnrt.end();
+}
+  
+void loop() {
+  if (Serial.available())
+    Serial2.write(Serial.read());
+
+  if (Serial2.available())
+    Serial.write(Serial2.read());
+
+  if (strcmp(Serial.read(),"b") == 0){
+    camera();
+    nnb();
+  }
+}
