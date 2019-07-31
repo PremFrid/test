@@ -8,24 +8,26 @@ DNNRT dnnrt;
 
 void setup() { 
   Serial.begin(115200); 
-  Serial2.begin(115200); 
+  //Serial2.begin(115200); 
   theSD.begin(); 
   theCamera.begin(); 
   theCamera.setStillPictureImageFormat( 320, 240,CAM_IMAGE_PIX_FMT_YUV422 ); 
   }
 
-void camera(){
+void camera() {
   if (theSD.exists("rsize.pgm")) {
     theSD.remove("rsize.pgm");
     Serial.println("removed rsize.pgm"); 
   }
+  
   Serial.println("take picture"); 
   CamImage img = theCamera.takePicture(); 
+  
   if (!img.isAvailable()) { 
     Serial.println("take picture failed"); 
     return;
   }
- 
+  
   CamImage small; 
   CamErr err = img.clipAndResizeImageByHW( small, 96, 56, 223, 183, 64, 64); 
   
@@ -60,11 +62,14 @@ void camera(){
 
 void nnb(){
   File nnbfile = theSD.open("iine_300.nnb");
+  
   if (!nnbfile) {
     Serial.print("nnb not found");
     return;
   }
+  
   int ret = dnnrt.begin(nnbfile);
+  
   if (ret < 0) {
     Serial.print("Runtime initialization failure. ");
     if (ret == -16) {
@@ -110,7 +115,7 @@ void nnb(){
    * so you can determine recognized number from this index.
    */
 
-  for (int x = 0; x < 10; x++) {
+  for (int x = 0; x < 3; x++) {
     Serial.print("value of ");
     Serial.print(x);
     Serial.print(" = ");
@@ -126,14 +131,23 @@ void nnb(){
 }
   
 void loop() {
-  if (Serial.available())
-    Serial2.write(Serial.read());
+  //if (Serial.available())
+  //  Serial2.write(Serial.read());
+  //
+  //if (Serial2.available())
+  //  Serial.write(Serial2.read());
+  //
+  
+  sleep(3);
+    
+  int arg = Serial.read();
+  Serial.println(arg);
 
-  if (Serial2.available())
-    Serial.write(Serial2.read());
-
-  if (strcmp(Serial.read(),"b") == 0){
+  //in ASCII code, 98 means "b"
+  if (arg==98){
     camera();
     nnb();
+  }
+  else{
   }
 }
